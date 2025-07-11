@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>GTFS Stops 可視化 - Leaflet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #map { width: 100vw; height: 100vh; }
+    #loading { position: absolute; top: 10px; left: 10px; background: #fff; padding: 8px 16px; border-radius: 4px; z-index: 10; }
+  </style>
+</head>
+<body>
+  <div id="loading">データを読み込み中...</div>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script>
+    const csvUrl = '../data/processed/csv/combined_stops.csv';
+    const map = L.map('map').setView([34.6618, 133.9350], 10); // 岡山中心
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    fetch(csvUrl)
+      .then(res => res.text())
+      .then(csvText => {
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            document.getElementById('loading').style.display = 'none';
+            results.data.forEach(row => {
+              const lat = parseFloat(row.stop_lat);
+              const lon = parseFloat(row.stop_lon);
+              if (!isNaN(lat) && !isNaN(lon)) {
+                L.circleMarker([lat, lon], {
+                  radius: 4,
+                  color: '#0074D9',
+                  fillOpacity: 0.7
+                }).addTo(map)
+                  .bindPopup(`<b>${row.stop_name || ''}</b><br>ID: ${row.stop_id || ''}`);
+              }
+            });
+          }
+        });
+      })
+      .catch(err => {
+        document.getElementById('loading').textContent = 'データの読み込みに失敗しました: ' + err.message;
+      });
+  </script>
+</body>
+</html> 
