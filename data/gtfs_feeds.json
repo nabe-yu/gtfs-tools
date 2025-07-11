@@ -8,6 +8,10 @@
     "url": "https://loc.bus-vision.jp/gtfs/okaden/gtfsFeed"
   },
   {
+    "name": "UnoBus",
+    "url": "https://api-public.odpt.org/api/v4/files/odpt/UnoBus/AllLines.zip?date=current"
+  },
+  {
     "name": "hayashimatowncommunitybus",
     "url": "https://api.gtfs-data.jp/v2/organizations/hayashimatown/feeds/hayashimatowncommunitybus/files/feed.zip"
   },
