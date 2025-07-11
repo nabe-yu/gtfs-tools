@@ -8,11 +8,37 @@
   <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
     #map { width: 100vw; height: 100vh; }
-    #loading { position: absolute; top: 10px; left: 10px; background: #fff; padding: 8px 16px; border-radius: 4px; z-index: 10; }
+    #loading { position: absolute; top: 10px; left: 10px; background: #fff; padding: 8px 16px; border-radius: 4px; z-index: 1000; }
+    #controls { position: absolute; top: 10px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 16px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); backdrop-filter: blur(10px); max-width: 250px; }
+    #controls label { display: block; margin-bottom: 8px; font-weight: 600; color: #333; }
+    #controls input[type="range"] { width: 200px; margin-bottom: 8px; }
+    #controls input[type="color"] { width: 50px; height: 30px; margin-bottom: 8px; border: none; border-radius: 4px; cursor: pointer; }
+    #radius-value { font-weight: bold; color: #6366f1; }
+    .mode-option { margin-bottom: 8px; }
+    .mode-option input[type="radio"] { margin-right: 8px; }
+    .circle-controls { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
   </style>
 </head>
 <body>
   <div id="loading">データを読み込み中...</div>
+  <div id="controls">
+    <label>表示モード:</label>
+    <div class="mode-option">
+      <input type="radio" id="mode-circles" name="mode" value="circles" checked>
+      <label for="mode-circles">円を描画</label>
+    </div>
+    <div class="mode-option">
+      <input type="radio" id="mode-points" name="mode" value="points">
+      <label for="mode-points">バス停の点のみ</label>
+    </div>
+    
+    <div class="circle-controls" id="circle-controls">
+      <label>半径: <span id="radius-value">500</span>m</label>
+      <input type="range" id="radius-slider" min="100" max="2000" value="500" step="100">
+      <label>円の色:</label>
+      <input type="color" id="circle-color" value="#6366f1">
+    </div>
+  </div>
   <div id="map"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -22,6 +48,90 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
+
+    let stopsData = [];
+    let circlesLayer = L.layerGroup().addTo(map);
+    let currentMode = 'circles';
+    let updateTimeout = null;
+
+    // コントロール要素
+    const radiusSlider = document.getElementById('radius-slider');
+    const radiusValue = document.getElementById('radius-value');
+    const circleColor = document.getElementById('circle-color');
+    const circleControls = document.getElementById('circle-controls');
+    const modeRadios = document.querySelectorAll('input[name="mode"]');
+
+    // モード切り替え処理
+    modeRadios.forEach(radio => {
+      radio.addEventListener('change', function() {
+        currentMode = this.value;
+        updateDisplay();
+      });
+    });
+
+    // デバウンス処理でパフォーマンス向上
+    radiusSlider.addEventListener('input', function() {
+      radiusValue.textContent = this.value;
+      if (currentMode === 'circles') {
+        clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(() => {
+          updateCircles();
+        }, 100);
+      }
+    });
+
+    circleColor.addEventListener('change', function() {
+      if (currentMode === 'circles') {
+        updateCircles();
+      }
+    });
+
+    function updateDisplay() {
+      // すべてのレイヤーをクリア
+      circlesLayer.clearLayers();
+
+      // 円のコントロール表示/非表示
+      if (currentMode === 'circles') {
+        circleControls.style.display = 'block';
+        updateCircles();
+      } else {
+        circleControls.style.display = 'none';
+      }
+    }
+
+    function updateCircles() {
+      if (currentMode !== 'circles') return;
+
+      circlesLayer.clearLayers();
+      const radius = parseInt(radiusSlider.value);
+      const color = circleColor.value;
+
+      // 表示範囲内のバス停のみ描画（パフォーマンス向上）
+      const bounds = map.getBounds();
+      const visibleStops = stopsData.filter(stop => 
+        bounds.contains([stop.lat, stop.lon])
+      );
+
+      // 一度に描画（レイヤー追加を最適化）
+      const circles = visibleStops.map(stop => 
+        L.circle([stop.lat, stop.lon], {
+          radius: radius,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.15,
+          weight: 1.5
+        })
+      );
+
+      circles.forEach(circle => circle.addTo(circlesLayer));
+    }
+
+    // 地図の移動・ズーム時に円を再描画
+    map.on('moveend zoomend', function() {
+      if (currentMode === 'circles') {
+        updateCircles();
+      }
+    });
 
     fetch(csvUrl)
       .then(res => res.text())
@@ -35,14 +145,27 @@
               const lat = parseFloat(row.stop_lat);
               const lon = parseFloat(row.stop_lon);
               if (!isNaN(lat) && !isNaN(lon)) {
+                // データを保存
+                stopsData.push({
+                  lat: lat,
+                  lon: lon,
+                  name: row.stop_name || '',
+                  id: row.stop_id || ''
+                });
+
+                // マーカーを追加（洗練されたデザイン）
                 L.circleMarker([lat, lon], {
-                  radius: 4,
-                  color: '#0074D9',
-                  fillOpacity: 0.7
+                  radius: 5,
+                  color: '#1f2937',
+                  fillColor: '#6366f1',
+                  fillOpacity: 0.8,
+                  weight: 2
                 }).addTo(map)
                   .bindPopup(`<b>${row.stop_name || ''}</b><br>ID: ${row.stop_id || ''}`);
               }
             });
+            // 初期表示
+            updateDisplay();
           }
         });
       })
